@@ -1,0 +1,43 @@
+name: Build and Push
+on:
+  push:
+    branches:
+      - premerge-ci
+  workflow_dispatch: { }
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: github.actor == 'sdellaco'
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '8.x'
+      - name: Get image metadata
+        uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: |
+            name=ghcr.io/${{ github.repository }}
+      - name: Login to ghcr.io
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: dotnet publish
+        shell: bash
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          VERSION="1.0-${COMMIT_SHA}"
+          dotnet publish --os linux --arch x64 -p:version="${VERSION}" -c Release -o out Rnwood.Smtp4dev/Rnwood.Smtp4dev.csproj
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
